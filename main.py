@@ -5,7 +5,6 @@ from urllib.request import urlopen, Request
 import folium
 from streamlit_folium import st_folium
 import pandas as pd
-import pytz
 import streamlit.components.v1 as components
 import firebase_admin
 from firebase_admin import credentials, messaging
@@ -31,22 +30,24 @@ if not firebase_admin._apps:
 # Initialize SQLite
 conn = sqlite3.connect(DB_FILE)
 cur = conn.cursor()
-cur.execute("CREATE TABLE IF NOT EXISTS tokens (token TEXT PRIMARY KEY)")
+cur.execute("CREATE TABLE IF NOT EXISTS tokens (token TEXT PRIMARY KEY, min_mag REAL DEFAULT 6.0)")
 conn.commit()
 
 # ------------------- Helpers -------------------
-def save_token(token: str):
-    """Save FCM token into SQLite"""
-    try:
-        cur.execute("INSERT OR IGNORE INTO tokens (token) VALUES (?)", (token,))
-        conn.commit()
-    except Exception as e:
-        print("DB Error:", e)
+def save_token(token: str, min_mag: float):
+    """Save or update FCM token + preference"""
+    cur.execute("INSERT OR REPLACE INTO tokens (token, min_mag) VALUES (?, ?)", (token, min_mag))
+    conn.commit()
 
 def load_tokens():
-    """Load all FCM tokens"""
-    cur.execute("SELECT token FROM tokens")
-    return [row[0] for row in cur.fetchall()]
+    """Load all tokens + preferences"""
+    cur.execute("SELECT token, min_mag FROM tokens")
+    return cur.fetchall()
+
+def delete_token(token: str):
+    """Remove a token (unsubscribe)"""
+    cur.execute("DELETE FROM tokens WHERE token = ?", (token,))
+    conn.commit()
 
 def haversine_km(lat1, lon1, lat2, lon2):
     R = 6371.0088
@@ -81,8 +82,8 @@ st.title("🌍 Quake Watch + Firebase Notifications")
 # Sidebar filters
 feed = st.sidebar.selectbox("🌐 Select USGS Feed", list(USGS_FEEDS.keys()))
 radius = st.sidebar.slider("📏 Radius (km)", 50, 2000, 500, 50)
-min_mag = st.sidebar.slider("📊 Minimum Magnitude", 1.0, 8.0, 3.0, 0.5)
-alert_mag = st.sidebar.slider("🚨 Notify if magnitude ≥", 4.0, 8.0, 6.0, 0.5)
+min_mag = st.sidebar.slider("📊 Show quakes with M≥", 1.0, 8.0, 3.0, 0.5)
+alert_mag = st.sidebar.slider("🚨 Default notify if M≥", 4.0, 8.0, 6.0, 0.5)
 
 # ------------------- Inject Firebase JS -------------------
 components.html(f"""
@@ -103,19 +104,28 @@ components.html(f"""
 
   Notification.requestPermission().then((permission) => {{
     if (permission === "granted") {{
-      messaging.getToken({{ vapidKey: "YOUR_REAL_PUBLIC_VAPID_KEY" }}).then((currentToken) => {{
-        if (currentToken) {{
-          window.parent.postMessage({{ type: "fcm_token", value: currentToken }}, "*");
-        }}
-      }});
+      messaging.getToken({{ vapidKey: "BAbSbjV7LCUjnB_vJGtvN5lp0BLxAi3rMKqu9mj6Heu4G-HkrQKes40q8odQRJO2fvgP7Nja2gr3QNOO-hEMw08" }})
+        .then((currentToken) => {{
+          if (currentToken) {{
+            window.parent.postMessage({{ type: "fcm_token", value: currentToken }}, "*");
+          }}
+        }});
     }}
   }});
 </script>
 """, height=0)
 
-# ------------------- Capture Token -------------------
+# ------------------- Handle Subscription -------------------
 if "fcm_token" in st.session_state:
-    save_token(st.session_state.fcm_token)
+    user_token = st.session_state.fcm_token
+    user_pref = st.sidebar.slider("🔔 My alert preference: Notify me if M≥", 4.0, 8.0, 6.0, 0.5)
+    if st.sidebar.button("✅ Save My Preference"):
+        save_token(user_token, user_pref)
+        st.sidebar.success(f"Saved preference: Alerts if M≥{user_pref}")
+    if st.sidebar.button("❌ Unsubscribe"):
+        delete_token(user_token)
+        st.sidebar.warning("You have unsubscribed from alerts.")
+
 tokens = load_tokens()
 if tokens:
     st.success(f"✅ {len(tokens)} devices subscribed for push alerts")
@@ -162,10 +172,10 @@ if events_sorted:
     st_folium(m, width=800, height=500)
 
     # ✅ Send Alerts if threshold exceeded
-    if events_sorted[0][1] >= alert_mag and tokens:
-        st.warning(f"🚨 Sending FCM alerts for M{events_sorted[0][1]:.1f} quake...")
-        for token in tokens:
-            result = send_quake_alert(token, events_sorted[0])
-            st.text(f"Token: {token[:20]}... → {result}")
+    latest = events_sorted[0]
+    for token, pref in tokens:
+        if latest[1] >= pref:  # respect user preference
+            result = send_quake_alert(token, latest)
+            st.text(f"📤 Sent alert to token {token[:20]}... (Pref M≥{pref}) → {result}")
 else:
     st.info("No recent earthquakes in range.")
