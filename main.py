@@ -19,6 +19,21 @@ USGS_FEEDS = {
 DB_FILE = "fcm_tokens.db"
 
 # ------------------- INIT -------------------
+# Ensure DB + table exists
+def init_db():
+    conn = sqlite3.connect(DB_FILE)
+    cur = conn.cursor()
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS tokens (
+            token TEXT PRIMARY KEY,
+            min_mag REAL DEFAULT 6.0
+        )
+    """)
+    conn.commit()
+    conn.close()
+
+init_db()
+
 # Initialize Firebase Admin SDK
 if not firebase_admin._apps:
     try:
@@ -29,29 +44,23 @@ if not firebase_admin._apps:
 
 # ------------------- SQLite Helpers -------------------
 def save_token(token: str, min_mag: float):
-    """Save or update FCM token + preference"""
     conn = sqlite3.connect(DB_FILE)
     cur = conn.cursor()
-    cur.execute("CREATE TABLE IF NOT EXISTS tokens (token TEXT PRIMARY KEY, min_mag REAL DEFAULT 6.0)")
     cur.execute("INSERT OR REPLACE INTO tokens (token, min_mag) VALUES (?, ?)", (token, min_mag))
     conn.commit()
     conn.close()
 
 def load_tokens():
-    """Load all tokens + preferences"""
     conn = sqlite3.connect(DB_FILE)
     cur = conn.cursor()
-    cur.execute("CREATE TABLE IF NOT EXISTS tokens (token TEXT PRIMARY KEY, min_mag REAL DEFAULT 6.0)")
     cur.execute("SELECT token, min_mag FROM tokens")
     rows = cur.fetchall()
     conn.close()
     return rows
 
 def delete_token(token: str):
-    """Remove a token (unsubscribe)"""
     conn = sqlite3.connect(DB_FILE)
     cur = conn.cursor()
-    cur.execute("CREATE TABLE IF NOT EXISTS tokens (token TEXT PRIMARY KEY, min_mag REAL DEFAULT 6.0)")
     cur.execute("DELETE FROM tokens WHERE token = ?", (token,))
     conn.commit()
     conn.close()
