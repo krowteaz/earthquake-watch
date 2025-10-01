@@ -73,7 +73,8 @@ st.title("🌍 Quake Watch - Earthquake Monitor")
 if "client_ip" not in st.session_state:
     st.session_state.client_ip = None
 
-st.experimental_get_query_params()  # Trigger session update
+# ✅ Use stable query params API
+_ = st.query_params  # ensures reactivity
 
 # Streamlit listens for postMessage from the HTML script
 client_ip = st.session_state.get("client_ip", None)
