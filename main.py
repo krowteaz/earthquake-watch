@@ -36,11 +36,9 @@ def fetch_geojson(url):
         return json.loads(resp.read().decode("utf-8"))
 
 def get_client_ip_location():
-    # If already resolved, return it
     if "client_loc" in st.session_state:
         return st.session_state.client_loc
 
-    # Inject JS to fetch client IP
     components.html(
         """
         <script>
@@ -54,8 +52,6 @@ def get_client_ip_location():
         """,
         height=0,
     )
-
-    # Default fallback while waiting
     return 14.5995, 120.9842, "Manila (fallback)"
 
 def get_timezone(lat, lon):
@@ -69,14 +65,11 @@ def get_timezone(lat, lon):
 st.set_page_config(page_title="🌍 Quake Watch", layout="wide")
 st.title("🌍 Quake Watch - Earthquake Monitor")
 
-# Handle client IP postMessage from browser
 if "client_ip" not in st.session_state:
     st.session_state.client_ip = None
 
-# ✅ Use stable query params API
-_ = st.query_params  # ensures reactivity
+_ = st.query_params
 
-# Streamlit listens for postMessage from the HTML script
 client_ip = st.session_state.get("client_ip", None)
 if client_ip and "client_loc" not in st.session_state:
     try:
@@ -90,7 +83,7 @@ if client_ip and "client_loc" not in st.session_state:
     except:
         st.session_state.client_loc = (14.5995, 120.9842, "Manila (fallback)")
 
-# Sidebar location selector
+# Sidebar
 st.sidebar.header("📍 Location Settings")
 loc_mode = st.sidebar.radio("Choose location mode", ["Auto (Client IP)", "Select Country", "Manual Lat/Lon"])
 
@@ -114,14 +107,23 @@ elif loc_mode == "Manual Lat/Lon":
     user_lon = st.sidebar.number_input("Longitude", value=120.9842, format="%.4f")
     user_label = f"Custom: {user_lat:.2f}, {user_lon:.2f}"
 
-# Determine timezone from location
 local_tz, tz_name = get_timezone(user_lat, user_lon)
 
 # Feed & filters
 feed = st.selectbox("🌐 Select USGS Feed", list(USGS_FEEDS.keys()))
 radius = st.slider("📏 Radius (km)", 50, 2000, 500, 50)
 min_mag = st.slider("📊 Minimum Magnitude", 1.0, 8.0, 3.0, 0.5)
-time_mode = st.radio("🕒 Show Time As", ["Local Time", "UTC"])
+
+# ------------------- Time Selection -------------------
+time_mode = st.radio("🕒 Show Time As", ["Local Time", "UTC", "Select GMT Offset"])
+
+gmt_offset = None
+selected_tz = None
+if time_mode == "Select GMT Offset":
+    offsets = [f"GMT{offset:+d}" for offset in range(-12, 15)]
+    gmt_choice = st.selectbox("Choose GMT Offset", offsets, index=offsets.index("GMT+0"))
+    gmt_offset = int(gmt_choice.replace("GMT", ""))
+    selected_tz = pytz.FixedOffset(gmt_offset * 60)
 
 # ------------------- Fetch events -------------------
 data = fetch_geojson(USGS_FEEDS[feed])
@@ -131,24 +133,27 @@ for f in data["features"]:
     mag = f["properties"]["mag"] or 0
     place = f["properties"]["place"]
     t_utc = datetime.utcfromtimestamp(f["properties"]["time"]/1000).replace(tzinfo=timezone.utc)
+
     if time_mode == "Local Time":
         t_disp = t_utc.astimezone(local_tz)
+    elif time_mode == "UTC":
+        t_disp = t_utc
+    elif time_mode == "Select GMT Offset" and selected_tz is not None:
+        t_disp = t_utc.astimezone(selected_tz)
     else:
         t_disp = t_utc
+
     dist = haversine_km(user_lat, user_lon, lat, lon)
     if mag >= min_mag and dist <= radius:
         events.append((t_disp, mag, place, lat, lon, dist))
 
-# Always define events_sorted
 events_sorted = sorted(events, key=lambda x: x[0], reverse=True)
 
 # ------------------- Events Table with Pagination -------------------
-st.subheader(f"📝 Earthquake Events near {user_label} (TZ: {tz_name})")
+st.subheader(f"📝 Earthquake Events near {user_label}")
 
 if events_sorted:
-    # ✅ Pagination size selector
     page_size = st.selectbox("Results per page:", [10, 20, 50], index=0)
-
     total_pages = math.ceil(len(events_sorted) / page_size)
     if "page" not in st.session_state:
         st.session_state.page = 1
@@ -176,7 +181,6 @@ if events_sorted:
         "Dist (km)": e[5]
     } for e in page_events])
 
-    # ✅ Format + Style
     def color_font(val):
         if isinstance(val, (int,float)):
             if val < 4: return "color: green"
