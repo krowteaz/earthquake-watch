@@ -10,6 +10,7 @@ import pandas as pd
 from geopy.geocoders import Nominatim
 from timezonefinder import TimezoneFinder
 import pytz
+import streamlit.components.v1 as components
 
 # ------------------- Constants -------------------
 USGS_FEEDS = {
@@ -34,18 +35,28 @@ def fetch_geojson(url):
     with urlopen(req, timeout=10, context=ctx) as resp:
         return json.loads(resp.read().decode("utf-8"))
 
-def get_ip_location():
-    try:
-        data = requests.get("https://ipinfo.io/json", timeout=10).json()
-        if "loc" in data:
-            lat, lon = map(float, data["loc"].split(","))
-            city = data.get("city","")
-            country = data.get("country","")
-            label = ", ".join(x for x in [city,country] if x)
-            return lat, lon, label
-    except:
-        pass
-    return 14.5995, 120.9842, "Manila, PH"
+def get_client_ip_location():
+    # If already resolved, return it
+    if "client_loc" in st.session_state:
+        return st.session_state.client_loc
+
+    # Inject JS to fetch client IP
+    components.html(
+        """
+        <script>
+        async function getIP() {
+            const resp = await fetch("https://api64.ipify.org?format=json");
+            const data = await resp.json();
+            window.parent.postMessage({type: "client_ip", value: data.ip}, "*");
+        }
+        getIP();
+        </script>
+        """,
+        height=0,
+    )
+
+    # Default fallback while waiting
+    return 14.5995, 120.9842, "Manila (fallback)"
 
 def get_timezone(lat, lon):
     tf = TimezoneFinder()
@@ -58,13 +69,33 @@ def get_timezone(lat, lon):
 st.set_page_config(page_title="🌍 Quake Watch", layout="wide")
 st.title("🌍 Quake Watch - Earthquake Monitor")
 
+# Handle client IP postMessage from browser
+if "client_ip" not in st.session_state:
+    st.session_state.client_ip = None
+
+st.experimental_get_query_params()  # Trigger session update
+
+# Streamlit listens for postMessage from the HTML script
+client_ip = st.session_state.get("client_ip", None)
+if client_ip and "client_loc" not in st.session_state:
+    try:
+        resp = requests.get(f"https://ipinfo.io/{client_ip}/json").json()
+        if "loc" in resp:
+            lat, lon = map(float, resp["loc"].split(","))
+            city = resp.get("city", "")
+            country = resp.get("country", "")
+            label = ", ".join(x for x in [city, country] if x)
+            st.session_state.client_loc = (lat, lon, label)
+    except:
+        st.session_state.client_loc = (14.5995, 120.9842, "Manila (fallback)")
+
 # Sidebar location selector
 st.sidebar.header("📍 Location Settings")
-loc_mode = st.sidebar.radio("Choose location mode", ["Auto (IP)", "Select Country", "Manual Lat/Lon"])
+loc_mode = st.sidebar.radio("Choose location mode", ["Auto (Client IP)", "Select Country", "Manual Lat/Lon"])
 
-if loc_mode == "Auto (IP)":
-    user_lat, user_lon, user_label = get_ip_location()
-    st.sidebar.success(f"Using your IP location: {user_label}")
+if loc_mode == "Auto (Client IP)":
+    user_lat, user_lon, user_label = get_client_ip_location()
+    st.sidebar.success(f"Using your browser IP location: {user_label}")
 elif loc_mode == "Select Country":
     countries = sorted([c.name for c in pycountry.countries])
     country = st.sidebar.selectbox("Choose a country", countries)
@@ -91,7 +122,7 @@ radius = st.slider("📏 Radius (km)", 50, 2000, 500, 50)
 min_mag = st.slider("📊 Minimum Magnitude", 1.0, 8.0, 3.0, 0.5)
 time_mode = st.radio("🕒 Show Time As", ["Local Time", "UTC"])
 
-# Fetch events
+# ------------------- Fetch events -------------------
 data = fetch_geojson(USGS_FEEDS[feed])
 events = []
 for f in data["features"]:
@@ -107,13 +138,13 @@ for f in data["features"]:
     if mag >= min_mag and dist <= radius:
         events.append((t_disp, mag, place, lat, lon, dist))
 
+# Always define events_sorted
+events_sorted = sorted(events, key=lambda x: x[0], reverse=True)
+
 # ------------------- Events Table with Pagination -------------------
 st.subheader(f"📝 Earthquake Events near {user_label} (TZ: {tz_name})")
 
-if events:
-    events_sorted = sorted(events, key=lambda x: x[0], reverse=True)
-
-    # Pagination
+if events_sorted:
     page_size = 10
     total_pages = math.ceil(len(events_sorted) / page_size)
     if "page" not in st.session_state:
@@ -135,7 +166,7 @@ if events:
 
     df = pd.DataFrame([{
         "Time": e[0].strftime("%Y-%m-%d %H:%M:%S"),
-        "Magnitude": round(e[1], 1),   # ✅ 1 decimal
+        "Magnitude": round(e[1], 1),
         "Place": e[2],
         "Lat": round(e[3], 2),
         "Lon": round(e[4], 2),
@@ -161,6 +192,7 @@ with col1:
     st.subheader("🗺️ Earthquake Map")
     m = folium.Map(location=[user_lat, user_lon], zoom_start=4, tiles="CartoDB positron")
     folium.Marker([user_lat, user_lon], tooltip=f"You: {user_label}", icon=folium.Icon(color="blue")).add_to(m)
+
     for e in events_sorted:
         color = "green" if e[1] < 4 else "orange" if e[1] < 6 else "red"
         folium.CircleMarker(
@@ -176,7 +208,7 @@ with col1:
 
 with col2:
     st.subheader("📈 Magnitude Trend (Page Events)")
-    if events:
+    if events_sorted:
         times = [e[0] for e in page_events]
         mags = [round(e[1],1) for e in page_events]
         colors = ["green" if m < 4 else "orange" if m < 6 else "red" for m in mags]
