@@ -5,7 +5,7 @@ firebase.initializeApp({
   apiKey: "AIzaSyB3uk0a4RSU9EcOJLadaWYvX_v8O82YWbs",
   authDomain: "earthquakewatch-1f530.firebaseapp.com",
   projectId: "earthquakewatch-1f530",
-  storageBucket: "earthquakewatch-1f530.firebasestorage.app",
+  storageBucket: "earthquakewatch-1f530.appspot.com",
   messagingSenderId: "550569254609",
   appId: "1:550569254609:web:4b4ece5b41b577f7f0eff0"
 });
