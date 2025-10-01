@@ -6,9 +6,10 @@ import pycountry
 import folium
 from streamlit_folium import st_folium
 import matplotlib.pyplot as plt
-from tzlocal import get_localzone   # local timezone
+import pandas as pd
+from tzlocal import get_localzone
 
-# USGS feeds
+# ------------------- Constants -------------------
 USGS_FEEDS = {
     "Past Hour (all)": "https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_hour.geojson",
     "Past Day (all)": "https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_day.geojson",
@@ -17,6 +18,7 @@ USGS_FEEDS = {
     "Past 7 Days (M4.5+)": "https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/4.5_week.geojson",
 }
 
+# ------------------- Helpers -------------------
 def haversine_km(lat1, lon1, lat2, lon2):
     R = 6371.0088
     phi1, phi2 = math.radians(lat1), math.radians(lat2)
@@ -30,7 +32,6 @@ def fetch_geojson(url):
     with urlopen(req, timeout=10, context=ctx) as resp:
         return json.loads(resp.read().decode("utf-8"))
 
-# ✅ Get location from IP
 def get_ip_location():
     try:
         data = requests.get("https://ipinfo.io/json", timeout=10).json()
@@ -44,11 +45,11 @@ def get_ip_location():
         pass
     return 14.5995, 120.9842, "Manila, PH"
 
-# ---------------- Streamlit UI ----------------
+# ------------------- Streamlit UI -------------------
 st.set_page_config(page_title="🌍 Quake Watch", layout="wide")
 st.title("🌍 Quake Watch - Earthquake Monitor (Web Edition)")
 
-# Location options
+# Sidebar location selector
 st.sidebar.header("📍 Location Settings")
 loc_mode = st.sidebar.radio("Choose location mode", ["Auto (IP)", "Select Country", "Manual Lat/Lon"])
 
@@ -58,7 +59,6 @@ if loc_mode == "Auto (IP)":
 elif loc_mode == "Select Country":
     countries = sorted([c.name for c in pycountry.countries])
     country = st.sidebar.selectbox("Choose a country", countries)
-    # use geopy here if needed, for now fallback to approximate center via Nominatim
     try:
         from geopy.geocoders import Nominatim
         geolocator = Nominatim(user_agent="quake_watch")
@@ -98,18 +98,42 @@ for f in data["features"]:
     if mag >= min_mag and dist <= radius:
         events.append((t_disp, mag, place, lat, lon, dist))
 
-# Events table
+# ------------------- Events Table -------------------
 st.subheader(f"📝 Earthquake Events near {user_label}")
-st.dataframe([{
-    "Time": e[0].strftime("%Y-%m-%d %H:%M:%S"),
-    "Magnitude": e[1],
-    "Place": e[2],
-    "Lat": e[3],
-    "Lon": e[4],
-    "Dist (km)": f"{e[5]:.1f}"
-} for e in events])
 
-# Layout: Map & Chart
+if events:
+    df = pd.DataFrame([{
+        "Time": e[0].strftime("%Y-%m-%d %H:%M:%S"),
+        "Magnitude": e[1],
+        "Place": e[2],
+        "Lat": round(e[3], 2),
+        "Lon": round(e[4], 2),
+        "Dist (km)": round(e[5], 1)
+    } for e in events])
+
+    def color_by_mag(val):
+        if isinstance(val, (int,float)):
+            if val < 4: return "background-color: #b6f7b0"   # green
+            elif val < 6: return "background-color: #ffe8a1" # yellow
+            else: return "background-color: #ff9d9d"         # red
+        return ""
+
+    styled_df = df.style.applymap(color_by_mag, subset=["Magnitude"])
+
+    st.markdown(
+        """
+        <style>
+        .stDataFrame {height: 400px !important;}
+        .stDataFrame table {font-size: 14px;}
+        </style>
+        """,
+        unsafe_allow_html=True
+    )
+    st.dataframe(styled_df, use_container_width=True, height=400)
+else:
+    st.info("No earthquake events found in this range.")
+
+# ------------------- Map & Chart -------------------
 col1, col2 = st.columns([2, 1])
 
 with col1:
