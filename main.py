@@ -1,5 +1,5 @@
 import streamlit as st
-import requests, json, math, ssl, sqlite3
+import requests, json, math, ssl
 from datetime import datetime, timezone
 from urllib.request import urlopen, Request
 import folium
@@ -7,7 +7,7 @@ from streamlit_folium import st_folium
 import pandas as pd
 import streamlit.components.v1 as components
 import firebase_admin
-from firebase_admin import credentials, messaging
+from firebase_admin import credentials, messaging, firestore
 
 # ------------------- CONFIG -------------------
 USGS_FEEDS = {
@@ -16,54 +16,31 @@ USGS_FEEDS = {
     "Past 7 Days (M2.5+)": "https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/2.5_week.geojson",
 }
 
-DB_FILE = "fcm_tokens.db"
-
 # ------------------- INIT -------------------
-# Ensure DB + table exists
-def init_db():
-    conn = sqlite3.connect(DB_FILE)
-    cur = conn.cursor()
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS tokens (
-            token TEXT PRIMARY KEY,
-            min_mag REAL DEFAULT 6.0
-        )
-    """)
-    conn.commit()
-    conn.close()
-
-init_db()
-
 # Initialize Firebase Admin SDK
 if not firebase_admin._apps:
     try:
-        cred = credentials.Certificate("serviceAccountKey.json")
+        cred = credentials.Certificate("serviceAccountKey.json")  # Download from Firebase
         firebase_admin.initialize_app(cred)
     except Exception as e:
         st.warning(f"⚠ Firebase not initialized: {e}")
 
-# ------------------- SQLite Helpers -------------------
-def save_token(token: str, min_mag: float):
-    conn = sqlite3.connect(DB_FILE)
-    cur = conn.cursor()
-    cur.execute("INSERT OR REPLACE INTO tokens (token, min_mag) VALUES (?, ?)", (token, min_mag))
-    conn.commit()
-    conn.close()
+db = firestore.client()
 
+# ------------------- Firestore Helpers -------------------
+def save_token(token: str, min_mag: float):
+    """Save or update FCM token in Firestore"""
+    doc_ref = db.collection("tokens").document(token)
+    doc_ref.set({"min_mag": min_mag})
+    
 def load_tokens():
-    conn = sqlite3.connect(DB_FILE)
-    cur = conn.cursor()
-    cur.execute("SELECT token, min_mag FROM tokens")
-    rows = cur.fetchall()
-    conn.close()
-    return rows
+    """Load all tokens + preferences"""
+    tokens_ref = db.collection("tokens").stream()
+    return [(doc.id, doc.to_dict().get("min_mag", 6.0)) for doc in tokens_ref]
 
 def delete_token(token: str):
-    conn = sqlite3.connect(DB_FILE)
-    cur = conn.cursor()
-    cur.execute("DELETE FROM tokens WHERE token = ?", (token,))
-    conn.commit()
-    conn.close()
+    """Remove a token (unsubscribe)"""
+    db.collection("tokens").document(token).delete()
 
 # ------------------- Utilities -------------------
 def haversine_km(lat1, lon1, lat2, lon2):
@@ -94,13 +71,12 @@ def send_quake_alert(token, event):
 
 # ------------------- Streamlit UI -------------------
 st.set_page_config(page_title="🌍 Quake Watch FCM", layout="wide")
-st.title("🌍 Quake Watch + Firebase Notifications")
+st.title("🌍 Quake Watch + Firebase Notifications (Firestore Edition)")
 
 # Sidebar filters
 feed = st.sidebar.selectbox("🌐 Select USGS Feed", list(USGS_FEEDS.keys()))
 radius = st.sidebar.slider("📏 Radius (km)", 50, 2000, 500, 50)
 min_mag = st.sidebar.slider("📊 Show quakes with M≥", 1.0, 8.0, 3.0, 0.5)
-alert_mag = st.sidebar.slider("🚨 Default notify if M≥", 4.0, 8.0, 6.0, 0.5)
 
 # ------------------- Inject Firebase JS -------------------
 components.html(f"""
