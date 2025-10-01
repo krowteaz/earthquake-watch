@@ -17,10 +17,10 @@ USGS_FEEDS = {
 }
 
 # ------------------- INIT -------------------
-# Initialize Firebase Admin SDK
+# Initialize Firebase Admin SDK (service account JSON required)
 if not firebase_admin._apps:
     try:
-        cred = credentials.Certificate("serviceAccountKey.json")  # Download from Firebase
+        cred = credentials.Certificate("serviceAccountKey.json")  # Download from Firebase console
         firebase_admin.initialize_app(cred)
     except Exception as e:
         st.warning(f"⚠ Firebase not initialized: {e}")
@@ -71,7 +71,7 @@ def send_quake_alert(token, event):
 
 # ------------------- Streamlit UI -------------------
 st.set_page_config(page_title="🌍 Quake Watch FCM", layout="wide")
-st.title("🌍 Quake Watch + Firebase Notifications (Firestore Edition)")
+st.title("🌍 Earthquake Watch + Firebase Notifications (Firestore Edition)")
 
 # Sidebar filters
 feed = st.sidebar.selectbox("🌐 Select USGS Feed", list(USGS_FEEDS.keys()))
@@ -87,7 +87,7 @@ components.html(f"""
     apiKey: "AIzaSyB3uk0a4RSU9EcOJLadaWYvX_v8O82YWbs",
     authDomain: "earthquakewatch-1f530.firebaseapp.com",
     projectId: "earthquakewatch-1f530",
-    storageBucket: "earthquakewatch-1f530.firebasestorage.app",
+    storageBucket: "earthquakewatch-1f530.appspot.com",   // ✅ fixed bucket
     messagingSenderId: "550569254609",
     appId: "1:550569254609:web:4b4ece5b41b577f7f0eff0",
     measurementId: "G-ZYPH4R72KE"
