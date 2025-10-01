@@ -146,7 +146,9 @@ events_sorted = sorted(events, key=lambda x: x[0], reverse=True)
 st.subheader(f"📝 Earthquake Events near {user_label} (TZ: {tz_name})")
 
 if events_sorted:
-    page_size = 10
+    # ✅ Pagination size selector
+    page_size = st.selectbox("Results per page:", [10, 20, 50], index=0)
+
     total_pages = math.ceil(len(events_sorted) / page_size)
     if "page" not in st.session_state:
         st.session_state.page = 1
@@ -167,13 +169,14 @@ if events_sorted:
 
     df = pd.DataFrame([{
         "Time": e[0].strftime("%Y-%m-%d %H:%M:%S"),
-        "Magnitude": round(e[1], 1),
+        "Magnitude": e[1],
         "Place": e[2],
-        "Lat": round(e[3], 2),
-        "Lon": round(e[4], 2),
-        "Dist (km)": round(e[5], 1)
+        "Lat": e[3],
+        "Lon": e[4],
+        "Dist (km)": e[5]
     } for e in page_events])
 
+    # ✅ Format + Style
     def color_font(val):
         if isinstance(val, (int,float)):
             if val < 4: return "color: green"
@@ -181,7 +184,17 @@ if events_sorted:
             else: return "color: red; font-weight: bold"
         return ""
 
-    styled_df = df.style.applymap(color_font, subset=["Magnitude"])
+    styled_df = (
+        df.style
+        .applymap(color_font, subset=["Magnitude"])
+        .format({
+            "Magnitude": "{:.1f}",
+            "Lat": "{:.2f}",
+            "Lon": "{:.2f}",
+            "Dist (km)": "{:.1f}"
+        })
+    )
+
     st.dataframe(styled_df, use_container_width=True, height=400)
 else:
     st.info("No earthquake events found in this range.")
@@ -203,7 +216,7 @@ with col1:
             fill=True,
             fill_color=color,
             fill_opacity=0.7,
-            tooltip=f"M{round(e[1],1)} {e[2]} at {e[0].strftime('%Y-%m-%d %H:%M:%S')}"
+            tooltip=f"M{e[1]:.1f} {e[2]} at {e[0].strftime('%Y-%m-%d %H:%M:%S')}"
         ).add_to(m)
     st_folium(m, width=800, height=500)
 
