@@ -120,9 +120,40 @@ time_mode = st.radio("🕒 Show Time As", ["Local Time", "UTC", "Select GMT Offs
 gmt_offset = None
 selected_tz = None
 if time_mode == "Select GMT Offset":
-    offsets = [f"GMT{offset:+d}" for offset in range(-12, 15)]
-    gmt_choice = st.selectbox("Choose GMT Offset", offsets, index=offsets.index("GMT+0"))
-    gmt_offset = int(gmt_choice.replace("GMT", ""))
+    gmt_reference = {
+        -12: "Baker Island",
+        -11: "American Samoa",
+        -10: "Hawaii",
+        -9: "Alaska",
+        -8: "Los Angeles, Vancouver",
+        -7: "Denver, Phoenix",
+        -6: "Chicago, Mexico City",
+        -5: "New York, Peru, Colombia",
+        -4: "Santiago, Caracas",
+        -3: "Buenos Aires, São Paulo",
+        -2: "South Georgia",
+        -1: "Azores",
+        0: "London, Lisbon, Accra",
+        1: "Berlin, Paris, Madrid",
+        2: "Athens, Cairo, Johannesburg",
+        3: "Moscow, Nairobi",
+        4: "Dubai, Baku",
+        5: "Pakistan, Maldives",
+        6: "Bangladesh, Kazakhstan",
+        7: "Thailand, Vietnam, Jakarta",
+        8: "China, Singapore, Philippines",
+        9: "Japan, Korea",
+        10: "Sydney, Papua New Guinea",
+        11: "Solomon Islands",
+        12: "Fiji, New Zealand",
+        13: "Samoa, Tonga",
+        14: "Kiribati"
+    }
+
+    options = [f"GMT{offset:+d} ({ref})" for offset, ref in gmt_reference.items()]
+    gmt_choice = st.selectbox("Choose GMT Offset", options, index=options.index("GMT+0 (London, Lisbon, Accra)"))
+    
+    gmt_offset = int(gmt_choice.split()[0].replace("GMT", ""))
     selected_tz = pytz.FixedOffset(gmt_offset * 60)
 
 # ------------------- Fetch events -------------------
