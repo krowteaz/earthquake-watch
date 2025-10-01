@@ -7,7 +7,9 @@ import folium
 from streamlit_folium import st_folium
 import matplotlib.pyplot as plt
 import pandas as pd
-from tzlocal import get_localzone
+from geopy.geocoders import Nominatim
+from timezonefinder import TimezoneFinder
+import pytz
 
 # ------------------- Constants -------------------
 USGS_FEEDS = {
@@ -45,9 +47,16 @@ def get_ip_location():
         pass
     return 14.5995, 120.9842, "Manila, PH"
 
+def get_timezone(lat, lon):
+    tf = TimezoneFinder()
+    tz_name = tf.timezone_at(lat=lat, lng=lon)
+    if tz_name:
+        return pytz.timezone(tz_name), tz_name
+    return timezone.utc, "UTC"
+
 # ------------------- Streamlit UI -------------------
 st.set_page_config(page_title="🌍 Quake Watch", layout="wide")
-st.title("🌍 Quake Watch - Earthquake Monitor (Web Edition)")
+st.title("🌍 Quake Watch - Earthquake Monitor")
 
 # Sidebar location selector
 st.sidebar.header("📍 Location Settings")
@@ -59,9 +68,8 @@ if loc_mode == "Auto (IP)":
 elif loc_mode == "Select Country":
     countries = sorted([c.name for c in pycountry.countries])
     country = st.sidebar.selectbox("Choose a country", countries)
+    geolocator = Nominatim(user_agent="quake_watch")
     try:
-        from geopy.geocoders import Nominatim
-        geolocator = Nominatim(user_agent="quake_watch")
         loc = geolocator.geocode(country, timeout=10)
         if loc:
             user_lat, user_lon, user_label = loc.latitude, loc.longitude, country
@@ -74,13 +82,14 @@ elif loc_mode == "Manual Lat/Lon":
     user_lon = st.sidebar.number_input("Longitude", value=120.9842, format="%.4f")
     user_label = f"Custom: {user_lat:.2f}, {user_lon:.2f}"
 
+# Determine timezone from location
+local_tz, tz_name = get_timezone(user_lat, user_lon)
+
 # Feed & filters
 feed = st.selectbox("🌐 Select USGS Feed", list(USGS_FEEDS.keys()))
 radius = st.slider("📏 Radius (km)", 50, 2000, 500, 50)
 min_mag = st.slider("📊 Minimum Magnitude", 1.0, 8.0, 3.0, 0.5)
 time_mode = st.radio("🕒 Show Time As", ["Local Time", "UTC"])
-
-LOCAL_TZ = get_localzone()
 
 # Fetch events
 data = fetch_geojson(USGS_FEEDS[feed])
@@ -91,7 +100,7 @@ for f in data["features"]:
     place = f["properties"]["place"]
     t_utc = datetime.utcfromtimestamp(f["properties"]["time"]/1000).replace(tzinfo=timezone.utc)
     if time_mode == "Local Time":
-        t_disp = t_utc.astimezone(LOCAL_TZ)
+        t_disp = t_utc.astimezone(local_tz)
     else:
         t_disp = t_utc
     dist = haversine_km(user_lat, user_lon, lat, lon)
@@ -99,9 +108,10 @@ for f in data["features"]:
         events.append((t_disp, mag, place, lat, lon, dist))
 
 # ------------------- Events Table -------------------
-st.subheader(f"📝 Earthquake Events near {user_label}")
+st.subheader(f"📝 Latest 10 Earthquake Events near {user_label} (TZ: {tz_name})")
 
 if events:
+    events_sorted = sorted(events, key=lambda x: x[0], reverse=True)[:10]
     df = pd.DataFrame([{
         "Time": e[0].strftime("%Y-%m-%d %H:%M:%S"),
         "Magnitude": e[1],
@@ -109,26 +119,17 @@ if events:
         "Lat": round(e[3], 2),
         "Lon": round(e[4], 2),
         "Dist (km)": round(e[5], 1)
-    } for e in events])
+    } for e in events_sorted])
 
-    def color_by_mag(val):
+    def color_font(val):
         if isinstance(val, (int,float)):
-            if val < 4: return "background-color: #b6f7b0"   # green
-            elif val < 6: return "background-color: #ffe8a1" # yellow
-            else: return "background-color: #ff9d9d"         # red
+            if val < 4: return "color: green"
+            elif val < 6: return "color: orange"
+            else: return "color: red; font-weight: bold"
         return ""
 
-    styled_df = df.style.applymap(color_by_mag, subset=["Magnitude"])
+    styled_df = df.style.applymap(color_font, subset=["Magnitude"])
 
-    st.markdown(
-        """
-        <style>
-        .stDataFrame {height: 400px !important;}
-        .stDataFrame table {font-size: 14px;}
-        </style>
-        """,
-        unsafe_allow_html=True
-    )
     st.dataframe(styled_df, use_container_width=True, height=400)
 else:
     st.info("No earthquake events found in this range.")
@@ -154,9 +155,9 @@ with col1:
     st_folium(m, width=800, height=500)
 
 with col2:
-    st.subheader("📈 Magnitude Trend")
+    st.subheader("📈 Magnitude Trend (last 10)")
     if events:
-        events_sorted = sorted(events, key=lambda x: x[0])
+        events_sorted = sorted(events, key=lambda x: x[0], reverse=True)[:10]
         times = [e[0] for e in events_sorted]
         mags = [e[1] for e in events_sorted]
         colors = ["green" if m < 4 else "orange" if m < 6 else "red" for m in mags]
