@@ -54,7 +54,7 @@ pytz
 3. Run the app:
 
 ```bash
-streamlit run quake_watch_web.py
+streamlit run main.py
 ```
 
 4. Open your browser at [http://localhost:8501](http://localhost:8501).  
