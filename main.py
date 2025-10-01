@@ -27,28 +27,36 @@ if not firebase_admin._apps:
     except Exception as e:
         st.warning(f"⚠ Firebase not initialized: {e}")
 
-# Initialize SQLite
-conn = sqlite3.connect(DB_FILE)
-cur = conn.cursor()
-cur.execute("CREATE TABLE IF NOT EXISTS tokens (token TEXT PRIMARY KEY, min_mag REAL DEFAULT 6.0)")
-conn.commit()
-
-# ------------------- Helpers -------------------
+# ------------------- SQLite Helpers -------------------
 def save_token(token: str, min_mag: float):
     """Save or update FCM token + preference"""
+    conn = sqlite3.connect(DB_FILE)
+    cur = conn.cursor()
+    cur.execute("CREATE TABLE IF NOT EXISTS tokens (token TEXT PRIMARY KEY, min_mag REAL DEFAULT 6.0)")
     cur.execute("INSERT OR REPLACE INTO tokens (token, min_mag) VALUES (?, ?)", (token, min_mag))
     conn.commit()
+    conn.close()
 
 def load_tokens():
     """Load all tokens + preferences"""
+    conn = sqlite3.connect(DB_FILE)
+    cur = conn.cursor()
+    cur.execute("CREATE TABLE IF NOT EXISTS tokens (token TEXT PRIMARY KEY, min_mag REAL DEFAULT 6.0)")
     cur.execute("SELECT token, min_mag FROM tokens")
-    return cur.fetchall()
+    rows = cur.fetchall()
+    conn.close()
+    return rows
 
 def delete_token(token: str):
     """Remove a token (unsubscribe)"""
+    conn = sqlite3.connect(DB_FILE)
+    cur = conn.cursor()
+    cur.execute("CREATE TABLE IF NOT EXISTS tokens (token TEXT PRIMARY KEY, min_mag REAL DEFAULT 6.0)")
     cur.execute("DELETE FROM tokens WHERE token = ?", (token,))
     conn.commit()
+    conn.close()
 
+# ------------------- Utilities -------------------
 def haversine_km(lat1, lon1, lat2, lon2):
     R = 6371.0088
     phi1, phi2 = math.radians(lat1), math.radians(lat2)
@@ -179,3 +187,12 @@ if events_sorted:
             st.text(f"📤 Sent alert to token {token[:20]}... (Pref M≥{pref}) → {result}")
 else:
     st.info("No recent earthquakes in range.")
+
+# ------------------- Token Dashboard -------------------
+st.subheader("📋 Subscribed Devices")
+tokens = load_tokens()
+if tokens:
+    df_tokens = pd.DataFrame(tokens, columns=["Token", "Min Magnitude Preference"])
+    st.dataframe(df_tokens, use_container_width=True, height=200)
+else:
+    st.write("No subscribed devices yet.")
