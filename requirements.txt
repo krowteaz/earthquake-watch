@@ -1,7 +1,10 @@
-streamlit>=1.30.0
-firebase-admin>=6.5.0
-requests>=2.31.0
-folium>=0.15.1
-streamlit-folium>=0.18.0
-pandas>=2.2.0
-pytz>=2024.1
+streamlit
+streamlit-folium
+folium
+requests
+matplotlib
+pandas
+pycountry
+geopy
+timezonefinder
+pytz
