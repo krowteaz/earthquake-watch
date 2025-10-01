@@ -107,19 +107,40 @@ for f in data["features"]:
     if mag >= min_mag and dist <= radius:
         events.append((t_disp, mag, place, lat, lon, dist))
 
-# ------------------- Events Table -------------------
-st.subheader(f"📝 Latest 10 Earthquake Events near {user_label} (TZ: {tz_name})")
+# ------------------- Events Table with Pagination -------------------
+st.subheader(f"📝 Earthquake Events near {user_label} (TZ: {tz_name})")
 
 if events:
-    events_sorted = sorted(events, key=lambda x: x[0], reverse=True)[:10]
+    events_sorted = sorted(events, key=lambda x: x[0], reverse=True)
+
+    # Pagination
+    page_size = 10
+    total_pages = math.ceil(len(events_sorted) / page_size)
+    if "page" not in st.session_state:
+        st.session_state.page = 1
+
+    col_pag1, col_pag2, col_pag3 = st.columns([1,2,1])
+    with col_pag1:
+        if st.button("⬅ Prev", disabled=(st.session_state.page <= 1)):
+            st.session_state.page -= 1
+    with col_pag2:
+        st.write(f"Page {st.session_state.page} of {total_pages}")
+    with col_pag3:
+        if st.button("Next ➡", disabled=(st.session_state.page >= total_pages)):
+            st.session_state.page += 1
+
+    start_idx = (st.session_state.page - 1) * page_size
+    end_idx = start_idx + page_size
+    page_events = events_sorted[start_idx:end_idx]
+
     df = pd.DataFrame([{
         "Time": e[0].strftime("%Y-%m-%d %H:%M:%S"),
-        "Magnitude": e[1],
+        "Magnitude": round(e[1], 1),   # ✅ 1 decimal
         "Place": e[2],
         "Lat": round(e[3], 2),
         "Lon": round(e[4], 2),
         "Dist (km)": round(e[5], 1)
-    } for e in events_sorted])
+    } for e in page_events])
 
     def color_font(val):
         if isinstance(val, (int,float)):
@@ -129,7 +150,6 @@ if events:
         return ""
 
     styled_df = df.style.applymap(color_font, subset=["Magnitude"])
-
     st.dataframe(styled_df, use_container_width=True, height=400)
 else:
     st.info("No earthquake events found in this range.")
@@ -141,7 +161,7 @@ with col1:
     st.subheader("🗺️ Earthquake Map")
     m = folium.Map(location=[user_lat, user_lon], zoom_start=4, tiles="CartoDB positron")
     folium.Marker([user_lat, user_lon], tooltip=f"You: {user_label}", icon=folium.Icon(color="blue")).add_to(m)
-    for e in events:
+    for e in events_sorted:
         color = "green" if e[1] < 4 else "orange" if e[1] < 6 else "red"
         folium.CircleMarker(
             [e[3], e[4]],
@@ -150,16 +170,15 @@ with col1:
             fill=True,
             fill_color=color,
             fill_opacity=0.7,
-            tooltip=f"M{e[1]} {e[2]} at {e[0].strftime('%H:%M:%S')}"
+            tooltip=f"M{round(e[1],1)} {e[2]} at {e[0].strftime('%Y-%m-%d %H:%M:%S')}"
         ).add_to(m)
     st_folium(m, width=800, height=500)
 
 with col2:
-    st.subheader("📈 Magnitude Trend (last 10)")
+    st.subheader("📈 Magnitude Trend (Page Events)")
     if events:
-        events_sorted = sorted(events, key=lambda x: x[0], reverse=True)[:10]
-        times = [e[0] for e in events_sorted]
-        mags = [e[1] for e in events_sorted]
+        times = [e[0] for e in page_events]
+        mags = [round(e[1],1) for e in page_events]
         colors = ["green" if m < 4 else "orange" if m < 6 else "red" for m in mags]
 
         fig, ax = plt.subplots(figsize=(6,4))
