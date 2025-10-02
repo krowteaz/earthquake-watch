@@ -1,5 +1,5 @@
 import streamlit as st
-import requests, json, math, ssl, time
+import requests, json, math, ssl
 from datetime import datetime, timezone
 from urllib.request import urlopen, Request
 import pycountry
@@ -11,6 +11,7 @@ from geopy.geocoders import Nominatim
 from timezonefinder import TimezoneFinder
 import pytz
 import streamlit.components.v1 as components
+from streamlit_autorefresh import st_autorefresh
 
 # ------------------- Constants -------------------
 USGS_FEEDS = {
@@ -25,9 +26,9 @@ USGS_FEEDS = {
 def haversine_km(lat1, lon1, lat2, lon2):
     R = 6371.0088
     phi1, phi2 = math.radians(lat1), math.radians(lat2)
-    dphi, dl = math.radians(lat2-lat1), math.radians(lon2-lon1)
-    a = math.sin(dphi/2)**2 + math.cos(phi1)*math.cos(phi2)*math.sin(dl/2)**2
-    return 2*R*math.asin(math.sqrt(a))
+    dphi, dl = math.radians(lat2 - lat1), math.radians(lon2 - lon1)
+    a = math.sin(dphi / 2) ** 2 + math.cos(phi1) * math.cos(phi2) * math.sin(dl / 2) ** 2
+    return 2 * R * math.asin(math.sqrt(a))
 
 def fetch_geojson(url):
     ctx = ssl.create_default_context()
@@ -64,12 +65,13 @@ def get_timezone(lat, lon):
 st.set_page_config(page_title="🌍 Quake Watch", layout="wide")
 st.title("🌍 Quake Watch - Real-time Earthquake Monitor")
 
-# 🔄 Real-time refresh (user can pick interval)
-refresh_rate = st.sidebar.slider("⏱️ Auto-refresh interval (seconds)", 30, 300, 60, 30)
-st_autorefresh = st.sidebar.checkbox("Enable Auto-refresh", value=True)
+# 🔄 Real-time refresh
+st.sidebar.header("⏱️ Refresh Settings")
+refresh_rate = st.sidebar.slider("Auto-refresh interval (seconds)", 30, 300, 60, 30)
+enable_refresh = st.sidebar.checkbox("Enable Auto-refresh", value=True)
 
-if st_autorefresh:
-    st_autorefresh_counter = st.experimental_autorefresh(interval=refresh_rate * 1000, limit=None, key="refresh_counter")
+if enable_refresh:
+    st_autorefresh(interval=refresh_rate * 1000, key="refresh_counter")
     st.caption(f"🔄 Auto-refresh every {refresh_rate} seconds")
 
 # ------------------- Location Detection -------------------
@@ -94,7 +96,7 @@ loc_mode = st.sidebar.radio("Choose location mode", ["Auto (Client IP)", "Select
 
 if loc_mode == "Auto (Client IP)":
     user_lat, user_lon, user_label = get_client_ip_location()
-    st.sidebar.success(f"Using your browser IP location: {user_label}")
+    st.sidebar.success(f"Using IP location: {user_label}")
 elif loc_mode == "Select Country":
     countries = sorted([c.name for c in pycountry.countries])
     country = st.sidebar.selectbox("Choose a country", countries)
@@ -134,7 +136,7 @@ for f in data["features"]:
 
 events_sorted = sorted(events, key=lambda x: x[0], reverse=True)
 
-# ------------------- Display -------------------
+# ------------------- Display Events -------------------
 st.subheader(f"📝 Earthquake Events near {user_label}")
 
 if events_sorted:
@@ -147,9 +149,17 @@ if events_sorted:
         "Dist (km)": e[5]
     } for e in events_sorted])
 
-    st.dataframe(df, use_container_width=True, height=400)
+    def color_font(val):
+        if isinstance(val, (int,float)):
+            if val < 4: return "color: green"
+            elif val < 6: return "color: orange"
+            else: return "color: red; font-weight: bold"
+        return ""
 
-    col1, col2 = st.columns([2,1])
+    styled_df = df.style.applymap(color_font, subset=["Magnitude"])
+    st.dataframe(styled_df, use_container_width=True, height=400)
+
+    col1, col2 = st.columns([2, 1])
     with col1:
         st.subheader("🗺️ Earthquake Map")
         m = folium.Map(location=[user_lat, user_lon], zoom_start=4, tiles="CartoDB positron")
