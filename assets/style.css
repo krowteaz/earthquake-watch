@@ -1,26 +1,8 @@
-
-:root{
-  --alog-accent: #10b981;
-  --alog-card: rgba(255,255,255,0.04);
-  --alog-border: rgba(255,255,255,0.08);
-  --alog-muted: #86a2b4;
-}
-.block-container { padding-top: 0.6rem; }
-.footer { color: var(--alog-muted); font-size: 0.9rem; margin-top: .75rem; }
-div[data-testid="stSidebar"] { min-width: 330px; }
-caption { color: var(--alog-muted); }
-table { font-size: 0.95rem; }
-[data-testid="stVerticalBlock"] > div { border-radius: 14px; padding: 10px 14px; background: var(--alog-card); border: 1px solid var(--alog-border); }
-.leaflet-interactive { transition: filter 0.3s ease; }
-.leaflet-interactive:hover { filter: drop-shadow(0 0 6px rgba(255,255,255,.65)); }
-.statusbar { margin-top: .25rem; margin-bottom: .25rem; }
-.pill { padding: 2px 8px; border-radius: 999px; font-weight: 600; }
-.pill.gps { background: #E8F5E9; color: #1B5E20; border: 1px solid #A5D6A7; }
-.pill.ip { background: #FFF8E1; color: #7C4D00; border: 1px solid #FFE082; }
-.pill.manual { background: #E3F2FD; color: #0D47A1; border: 1px solid #90CAF9; }
-.pill.neutral { background: #ECEFF1; color: #37474F; border: 1px solid #CFD8DC; }
-.pill.none { background: #F5F5F5; color: #616161; border: 1px solid #E0E0E0; }
-div[data-testid="stDataFrame"] img { height: 18px !important; width: auto !important; }
-.dense-table div[data-testid="stDataFrame"] table { font-size: 0.9rem !important; }
-.dense-table div[data-testid="stDataFrame"] td, .dense-table div[data-testid="stDataFrame"] th { padding-top: 3px !important; padding-bottom: 3px !important; }
-button[role="tab"][aria-selected="true"] { border-bottom: 2px solid var(--alog-accent) !important; }
+.statusbar{margin:10px 0;padding:8px 12px;border-radius:10px;background:rgba(0,0,0,0.05);}
+.pill{padding:3px 8px;border-radius:999px;background:#ddd;color:#000;font-weight:600}
+.pill.gps{background:#e0f7fa;color:#006064}
+.pill.ip{background:#e8f5e9;color:#1b5e20}
+.pill.manual{background:#e3f2fd;color:#0d47a1}
+.pill.neutral{background:#eceff1;color:#263238}
+.pill.none{background:#ffebee;color:#b71c1c}
+.dense-table div[data-testid="stVerticalBlock"] table{font-size:12px}

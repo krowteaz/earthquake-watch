@@ -8,3 +8,4 @@ timezonefinder
 matplotlib
 streamlit-autorefresh
 feedparser
+python-dotenv
